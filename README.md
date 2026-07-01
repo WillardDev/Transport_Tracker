@@ -1,4 +1,4 @@
-# MatatuMinder
+# NaiFare
 
 A Nairobi Matatu Fare & Route Tracker. Scrapes real route data from [Nairobi Postal Code](https://nairobipostalcode.org/nairobi-matatu-routes/), stores it in SQLite, and provides both a terminal CLI and a Streamlit web UI to browse routes, track fare history, and get weather-based fare alerts.
 
