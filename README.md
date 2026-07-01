@@ -34,7 +34,6 @@ Run once to seed the database:
 
 ```bash
 python3 matatu_tracker.py
-# Select option 9 (Setup / Seed Database)
 ```
 
 ## Usage
@@ -70,8 +69,8 @@ Opens at `http://localhost:8501`
 
 Routes and fares are scraped from [Nairobi Postal Code](https://nairobipostalcode.org/nairobi-matatu-routes/), which covers all lettered matatu lines (A–Z) operating in Nairobi. The scraper extracts:
 
-- **17 route tables** (A through Z lines) — 97 routes with route numbers and destinations
-- **6 SACCOs** — Super Metro, Citi Hoppa, Double M, Compliant MOA, NACICO, Kenya Mpya
+- **route tables** (A through Z lines) — 97 routes with route numbers and destinations
+- **SACCOs** — Super Metro, Citi Hoppa, Double M, Compliant MOA, NACICO, Kenya Mpya
 - **Fare ranges** — short, medium, and long distance fare bands
 
 ## Database Schema
