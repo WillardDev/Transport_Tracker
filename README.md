@@ -1,22 +1,23 @@
 # NaiFare
 
-A Nairobi Matatu Fare & Route Tracker. Scrapes real route data from [Nairobi Postal Code](https://nairobipostalcode.org/nairobi-matatu-routes/), stores it in SQLite, and provides both a terminal CLI and a Streamlit web UI to browse routes, track fare history, and get weather-based fare alerts.
+A Nairobi Matatu Fare & Route Tracker. Scrapes real route data from multiple sources, stores it in SQLite, and provides both a terminal CLI and a Streamlit web UI to browse routes, track fare history, and get weather-based fare alerts.
 
 ## Features
 
-- **View & Search** — browse all 97 matatu routes across 6 SACCOs, search by route number, location, or SACCO name
+- **View & Search** — browse **97 local routes** (Nairobi area) and **250+ long-distance routes** (Nairobi to towns across Kenya), search by route number, location, or SACCO name
 - **Fare Ranges** — each route shows its minimum and maximum fare from the source data
 - **Fare History** — record and track fare changes over time with weather context
 - **Weather Alerts** — live weather via OpenWeatherMap with fare surge warnings on rainy days
-- **Web Scraping** — fetch live route data from nairobipostalcode.org and seed the database
+- **Web Scraping** — fetch live route data from three sources and seed the database
 - **Dual Interface** — use the terminal CLI or the Streamlit web app
+- **Filter by Type** — toggle between local routes and long-distance routes
 
 ## Project Structure
 
 | File | Purpose |
 |------|---------|
 | `database.py` | SQLite schema & CRUD operations |
-| `scraper.py` | Web scraper for nairobipostalcode.org |
+| `scraper.py` | Web scrapers for all data sources |
 | `seed_data.py` | Database seeding (CSV → scrape → fallback) |
 | `models.py` | Python classes for SACCO, Route, Fare |
 | `weather_api.py` | OpenWeatherMap integration |
@@ -46,7 +47,7 @@ python3 matatu_tracker.py
 
 | Option | Description |
 |--------|-------------|
-| 1 | View all routes with fare ranges |
+| 1 | View all routes (with local/long-distance filter) |
 | 2 | Search routes |
 | 3 | Route details & fare history |
 | 4 | Weather check & fare alerts |
@@ -65,18 +66,22 @@ streamlit run streamlit_app.py
 
 Opens at `http://localhost:8501`
 
-## Data Source
+## Data Sources
 
-Routes and fares are scraped from [Nairobi Postal Code](https://nairobipostalcode.org/nairobi-matatu-routes/), which covers all lettered matatu lines (A–Z) operating in Nairobi. The scraper extracts:
+Routes, fares, and SACCOs are scraped from three sources:
 
-- **route tables** (A through Z lines) — 97 routes with route numbers and destinations
-- **SACCOs** — Super Metro, Citi Hoppa, Double M, Compliant MOA, NACICO, Kenya Mpya
-- **Fare ranges** — short, medium, and long distance fare bands
+1. **[Nairobi Postal Code](https://nairobipostalcode.org/nairobi-matatu-routes/)** — all lettered matatu lines (A–Z) operating in Nairobi. Provides 97 local routes with route numbers, destinations, and fare bands.
+
+2. **[Situations.co.ke](https://situations.co.ke/matatu-bus-fares-from-nairobi/)** — long-distance bus and matatu fares from Nairobi to destinations across Kenya (Mombasa, Kisumu, Nakuru, Nyeri, Meru, Kitale, etc.). Each entry includes the SACCO/operator name and fare.
+
+3. **[Elimu Centre](https://www.elimucentre.com/registered-matatu-sacco-operating-in-nairobi/)** — a comprehensive list of ~73 registered SACCOs operating in and from Nairobi.
 
 ## Database Schema
 
 ```
 saccos (id, name, code)
-routes (id, route_number, start_point, end_point, sacco_id, fare_min, fare_max)
+routes (id, route_number, start_point, end_point, sacco_id, fare_min, fare_max, route_type)
 fares  (id, route_id, amount, date, weather_condition)
 ```
+
+The `route_type` column distinguishes `local` (Nairobi area) from `long_distance` (inter-county) routes.
