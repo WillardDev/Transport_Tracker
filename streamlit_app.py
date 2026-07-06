@@ -9,6 +9,8 @@ from database import (
     update_sacco, delete_sacco, export_routes_to_csv
 )
 from weather_api import get_weather, get_fare_alert, is_rainy, validate_kenyan_city, KENYAN_TOWNS
+from political_api import get_political_status
+from auth import is_authenticated, require_auth, ADMIN_PAGES
 
 create_tables()
 
@@ -16,6 +18,8 @@ st.set_page_config(
     page_title="NaiFare",
     layout="wide",
 )
+
+PAGE_LOGIN = "Admin Login"
 
 PAGES = [
     "Home",
@@ -25,9 +29,11 @@ PAGES = [
     "Add Fare Record",
     "Add New Route",
     "Manage SACCOs",
+    "Political Climate",
     "Scrape & Seed Database",
     "Statistics",
     "Weather Check & Fare Alert",
+    PAGE_LOGIN,
 ]
 
 def _route_type_selector(key="route_type"):
@@ -152,22 +158,22 @@ def route_details():
     col3.markdown(f"**Fare Max:** KSh {fmax}" if fmax else "**Fare Max:** N/A")
     col4.markdown(f"**Type:** {rtype.replace('_', ' ').title()}")
 
-    with st.expander("Edit this route"):
-        col1, col2 = st.columns(2)
-        new_rn = col1.text_input("Route number", value=route_number)
-        new_start = col1.text_input("Starting point", value=start)
-        new_end = col2.text_input("Destination", value=end)
-        new_fmin = col2.number_input("Min fare (KSh)", min_value=0, value=fmin or 0, step=5)
-        new_fmax = col1.number_input("Max fare (KSh)", min_value=0, value=fmax or 0, step=5)
-        new_rtype = col2.radio("Type", ["local", "long_distance"], index=0 if rtype == "local" else 1)
-        if st.button("Update Route"):
-            update_route(db_id, route_number=new_rn, start=new_start, end=new_end,
-                         fare_min=new_fmin or None, fare_max=new_fmax or None, route_type=new_rtype)
-            st.success("Route updated!")
-            st.rerun()
+    if is_authenticated():
+        with st.expander("Edit this route"):
+            col1, col2 = st.columns(2)
+            new_rn = col1.text_input("Route number", value=route_number)
+            new_start = col1.text_input("Starting point", value=start)
+            new_end = col2.text_input("Destination", value=end)
+            new_fmin = col2.number_input("Min fare (KSh)", min_value=0, value=fmin or 0, step=5)
+            new_fmax = col1.number_input("Max fare (KSh)", min_value=0, value=fmax or 0, step=5)
+            new_rtype = col2.radio("Type", ["local", "long_distance"], index=0 if rtype == "local" else 1)
+            if st.button("Update Route"):
+                update_route(db_id, route_number=new_rn, start=new_start, end=new_end,
+                             fare_min=new_fmin or None, fare_max=new_fmax or None, route_type=new_rtype)
+                st.success("Route updated!")
+                st.rerun()
 
-    del_col1, del_col2 = st.columns(2)
-    with del_col1:
+    if is_authenticated():
         if st.button("Delete this route and all its fares", type="secondary", use_container_width=True):
             if delete_route(db_id):
                 st.success("Route deleted.")
@@ -181,32 +187,34 @@ def route_details():
         fare_df = pd.DataFrame(fare_rows)
 
         st.subheader("Fare Records")
-        with st.expander("Edit a fare record"):
-            edit_fid = st.number_input("Fare ID to edit", min_value=1, step=1, key="edit_fid")
-            edit_amount = st.number_input("New amount (KSh)", min_value=1, step=5, key="edit_amt")
-            edit_weather = st.text_input("Weather condition (optional)", key="edit_wx")
-            if st.button("Update Fare"):
-                update_fare(edit_fid, amount=edit_amount, weather=edit_weather or None)
-                st.success("Fare updated!")
-                st.rerun()
+        if is_authenticated():
+            with st.expander("Edit a fare record"):
+                edit_fid = st.number_input("Fare ID to edit", min_value=1, step=1, key="edit_fid")
+                edit_amount = st.number_input("New amount (KSh)", min_value=1, step=5, key="edit_amt")
+                edit_weather = st.text_input("Weather condition (optional)", key="edit_wx")
+                if st.button("Update Fare"):
+                    update_fare(edit_fid, amount=edit_amount, weather=edit_weather or None)
+                    st.success("Fare updated!")
+                    st.rerun()
 
-        with st.expander("Delete a fare record by date"):
-            unique_dates = sorted(set(f[2] for f in fares), reverse=True)
-            del_date = st.selectbox("Select date", unique_dates, key="del_date")
-            matching = [(fid, a, d, w) for fid, a, d, w in fares if d == del_date]
-            if len(matching) == 1:
-                st.write(f"Fare on {del_date}: KSh {matching[0][1]} ({matching[0][3] or 'no weather'})")
-                if st.button("Delete this fare", key="del_date_btn"):
-                    if delete_fare(matching[0][0]):
-                        st.success("Fare deleted.")
-                        st.rerun()
-            elif len(matching) > 1:
-                del_opts = {f"KSh {a} on {d} ({w or 'no weather'})": fid for fid, a, d, w in matching}
-                del_choice = st.selectbox("Which fare?", list(del_opts.keys()), key="del_choice")
-                if st.button("Delete selected fare", key="del_date_btn"):
-                    if delete_fare(del_opts[del_choice]):
-                        st.success("Fare deleted.")
-                        st.rerun()
+        if is_authenticated():
+            with st.expander("Delete a fare record by date"):
+                unique_dates = sorted(set(f[2] for f in fares), reverse=True)
+                del_date = st.selectbox("Select date", unique_dates, key="del_date")
+                matching = [(fid, a, d, w) for fid, a, d, w in fares if d == del_date]
+                if len(matching) == 1:
+                    st.write(f"Fare on {del_date}: KSh {matching[0][1]} ({matching[0][3] or 'no weather'})")
+                    if st.button("Delete this fare", key="del_date_btn"):
+                        if delete_fare(matching[0][0]):
+                            st.success("Fare deleted.")
+                            st.rerun()
+                elif len(matching) > 1:
+                    del_opts = {f"KSh {a} on {d} ({w or 'no weather'})": fid for fid, a, d, w in matching}
+                    del_choice = st.selectbox("Which fare?", list(del_opts.keys()), key="del_choice")
+                    if st.button("Delete selected fare", key="del_date_btn"):
+                        if delete_fare(del_opts[del_choice]):
+                            st.success("Fare deleted.")
+                            st.rerun()
 
         fare_df = fare_df.set_index("ID") if "ID" in fare_df.columns else fare_df
         st.dataframe(fare_df, use_container_width=True)
@@ -363,6 +371,31 @@ def manage_saccos():
                     st.rerun()
 
 
+def political_climate():
+    st.header("Political Climate")
+    st.caption("Analyses news to assess travel safety and fare outlook.")
+
+    if st.button("Check Now", type="primary"):
+        with st.spinner("Fetching and analysing news..."):
+            result = get_political_status()
+
+        status = result["status"]
+        color = {"stable": "green", "uncertain": "orange", "unstable": "red"}[status]
+
+        st.markdown(f"### Status: :{color}[{status.upper()}]")
+        st.info(result["summary"])
+
+        st.metric("Travel Safety", result["safety"])
+        st.metric("Fare Outlook", result["fare_outlook"])
+
+        st.caption(f"Source: {result['source']}")
+
+        if result["headlines"]:
+            with st.expander("Recent headlines"):
+                for h in result["headlines"]:
+                    st.write(f"- {h}")
+
+
 def scrape_and_seed():
     st.header("Scrape & Seed Database")
     st.markdown("""
@@ -408,6 +441,21 @@ def statistics():
             data.append({"SACCO": name, "Code": code, "Routes": count})
         st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
 
+def login_page():
+    st.header("Admin Login")
+    with st.form("login_form"):
+        user = st.text_input("Email")
+        pwd = st.text_input("Password", type="password")
+        if st.form_submit_button("Login", use_container_width=True):
+            from auth import login
+            if login(user, pwd):
+                st.session_state.show_login = False
+                st.success("Logged in!")
+                st.rerun()
+            else:
+                st.error("Invalid credentials")
+
+
 PAGE_FUNCS = {
     "Home": home,
     "View Routes": view_routes,
@@ -416,16 +464,19 @@ PAGE_FUNCS = {
     "Add Fare Record": add_fare,
     "Add New Route": add_route,
     "Manage SACCOs": manage_saccos,
+    "Political Climate": political_climate,
     "Scrape & Seed Database": scrape_and_seed,
     "Statistics": statistics,
     "Weather Check & Fare Alert": weather_check,
+    PAGE_LOGIN: login_page,
 }
 
 st.sidebar.title("NaiFare")
 st.sidebar.caption("Nairobi Matatu Fare Tracker")
-st.sidebar.divider()
 
-selection = st.sidebar.radio("Navigate", PAGES)
+# Filter pages based on auth
+visible_pages = [p for p in PAGES if is_authenticated() or p not in ADMIN_PAGES + [PAGE_LOGIN]]
+selection = st.sidebar.radio("Navigate", visible_pages)
 
 st.sidebar.divider()
 st.sidebar.markdown("**Data sources**")
@@ -435,4 +486,26 @@ st.sidebar.markdown(
     "[Elimu Centre](https://www.elimucentre.com/registered-matatu-sacco-operating-in-nairobi/)"
 )
 
-PAGE_FUNCS[selection]()
+# Top-right auth icon
+top_col1, top_col2, top_col3 = st.columns([8, 1, 1])
+with top_col3:
+    if not is_authenticated():
+        if st.button("Login", key="top_login"):
+            st.session_state.show_login = True
+            st.rerun()
+    else:
+        st.caption(st.session_state.user.split("@")[0])
+        if st.button("Logout", key="top_logout"):
+            from auth import logout
+            logout()
+            st.rerun()
+st.divider()
+
+if st.session_state.get("show_login") or selection == PAGE_LOGIN:
+    login_page()
+elif not is_authenticated() and selection in ADMIN_PAGES:
+    require_auth()
+else:
+    func = PAGE_FUNCS.get(selection)
+    if func:
+        func()

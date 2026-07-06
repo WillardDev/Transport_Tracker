@@ -8,6 +8,7 @@ from database import (
 )
 from seed_data import seed_database
 from weather_api import get_weather, get_fare_alert, is_rainy, validate_kenyan_city, KENYAN_TOWNS
+from political_api import get_political_status
 from scraper import SCRAPE_URL, scrape_route_data, write_csv, load_csv, extract_fare_amount, clean_route_text
 from models import SACCO, Route, Fare
 
@@ -438,6 +439,22 @@ def remove_fare():
         print("Fare not found.")
 
 
+def political_check():
+    hr("POLITICAL CLIMATE & TRAVEL ADVISORY")
+    print("  Fetching and analysing news...")
+    result = get_political_status()
+    status = result["status"]
+    print(f"\n  Status: {status.upper()}")
+    print(f"  {result['summary']}")
+    print(f"\n  Travel Safety: {result['safety']}")
+    print(f"  Fare Outlook: {result['fare_outlook']}")
+    print(f"  Source: {result['source']}")
+    if result["headlines"]:
+        print("\n  Recent headlines:")
+        for h in result["headlines"]:
+            print(f"    - {h}")
+
+
 def exit_app():
     hr("THANK YOU")
     print("  Fare transparency matters. Stay informed!")
@@ -454,6 +471,7 @@ MENU = [
     ("Edit Route", edit_route),
     ("Delete Route", remove_route),
     ("Delete Fare Record", remove_fare),
+    ("Political Climate & Travel Advisory", political_check),
     ("Export Routes to CSV", export_csv),
     ("Scrape Route Data (Web)", scrape_web),
     ("Setup / Seed Database", setup_db),
