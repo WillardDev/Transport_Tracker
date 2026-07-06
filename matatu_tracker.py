@@ -4,7 +4,7 @@ import sys
 from database import (
     create_tables, get_all_saccos, get_all_routes, search_routes,
     get_route_fares, get_latest_fare, insert_fare, insert_route,
-    route_exists, export_routes_to_csv
+    route_exists, export_routes_to_csv, update_route, delete_route, delete_fare
 )
 from seed_data import seed_database
 from weather_api import get_weather, get_fare_alert, is_rainy, validate_kenyan_city, KENYAN_TOWNS
@@ -322,6 +322,122 @@ def stats():
             print(f"    {name} ({code}): {count} routes")
 
 
+def edit_route():
+    rt = _route_type_filter()
+    label = "ALL" if rt is None else ("LOCAL" if rt == "local" else "LONG-DISTANCE")
+    routes = get_all_routes(rt)
+    if not routes:
+        print(f"No {label.lower()} routes to edit.")
+        return
+
+    print(f"Routes ({label}):")
+    for db_id, route_number, start, end, name, code, fmin, fmax, rtype in routes:
+        print(f"  [{db_id}] {route_number}: {start} -> {end} ({name})")
+
+    try:
+        rid = int(input("\nEnter route ID to edit: "))
+    except ValueError:
+        print("Invalid input.")
+        return
+
+    selected = None
+    for r in routes:
+        if r[0] == rid:
+            selected = r
+            break
+    if not selected:
+        print("Invalid route ID.")
+        return
+
+    db_id, route_number, start, end, name, code, fmin, fmax, rtype = selected
+    print(f"\nEditing Route {route_number} ({start} -> {end})")
+    print("Press Enter to keep current value.")
+
+    new_rn = input(f"Route number [{route_number}]: ").strip()
+    new_start = input(f"Starting point [{start}]: ").strip()
+    new_end = input(f"Destination [{end}]: ").strip()
+    new_fmin = input(f"Fare min [KSh {fmin}]: ").strip()
+    new_fmax = input(f"Fare max [KSh {fmax}]: ").strip()
+
+    if update_route(
+        db_id,
+        route_number=new_rn or None,
+        start=new_start or None,
+        end=new_end or None,
+        fare_min=int(new_fmin) if new_fmin else None,
+        fare_max=int(new_fmax) if new_fmax else None,
+    ):
+        print("Route updated.")
+    else:
+        print("No changes made.")
+
+
+def remove_route():
+    rt = _route_type_filter()
+    label = "ALL" if rt is None else ("LOCAL" if rt == "local" else "LONG-DISTANCE")
+    routes = get_all_routes(rt)
+    if not routes:
+        print(f"No {label.lower()} routes to delete.")
+        return
+
+    print(f"Routes ({label}):")
+    for db_id, route_number, start, end, name, code, fmin, fmax, rtype in routes:
+        print(f"  [{db_id}] {route_number}: {start} -> {end} ({name})")
+
+    try:
+        rid = int(input("\nEnter route ID to delete: "))
+    except ValueError:
+        print("Invalid input.")
+        return
+
+    ans = input(f"Delete route ID {rid} and all its fare records? (y/n): ").strip().lower()
+    if ans == "y":
+        if delete_route(rid):
+            print("Route and associated fares deleted.")
+        else:
+            print("Route not found.")
+
+
+def remove_fare():
+    rt = _route_type_filter()
+    label = "ALL" if rt is None else ("LOCAL" if rt == "local" else "LONG-DISTANCE")
+    routes = get_all_routes(rt)
+    if not routes:
+        print(f"No {label.lower()} routes.")
+        return
+
+    print(f"Routes ({label}):")
+    for db_id, route_number, start, end, name, code, *_ in routes:
+        print(f"  [{db_id}] {route_number}: {start} -> {end} ({name})")
+
+    try:
+        rid = int(input("\nEnter route ID to view fares: "))
+    except ValueError:
+        print("Invalid input.")
+        return
+
+    fares = get_route_fares(rid)
+    if not fares:
+        print("No fare records for this route.")
+        return
+
+    for fid, amount, date, weather in fares:
+        w = f" ({weather})" if weather else ""
+        print(f"  [{fid}] KSh {amount} - {date}{w}")
+
+    try:
+        fid = int(input("\nEnter fare ID to delete: "))
+    except ValueError:
+        print("Invalid input.")
+        return
+
+    ans = input(f"Delete fare ID {fid}? (y/n): ").strip().lower()
+    if ans == "y" and delete_fare(fid):
+        print("Fare deleted.")
+    else:
+        print("Fare not found.")
+
+
 def exit_app():
     hr("THANK YOU")
     print("  Fare transparency matters. Stay informed!")
@@ -335,6 +451,9 @@ MENU = [
     ("Weather Check & Fare Alert", weather_check),
     ("Add Fare Record", add_fare),
     ("Add New Route", add_route),
+    ("Edit Route", edit_route),
+    ("Delete Route", remove_route),
+    ("Delete Fare Record", remove_fare),
     ("Export Routes to CSV", export_csv),
     ("Scrape Route Data (Web)", scrape_web),
     ("Setup / Seed Database", setup_db),
@@ -347,7 +466,7 @@ create_tables()
 while True:
     clear()
     print("=" * 52)
-    print("    MATATUMINDER")
+    print("    NAIFARE")
     print("    Nairobi Matatu Fare & Route Tracker")
     print("=" * 52)
     print()

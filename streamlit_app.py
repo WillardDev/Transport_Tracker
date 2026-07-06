@@ -4,8 +4,9 @@ import os
 
 from database import (
     create_tables, get_all_saccos, get_all_routes, search_routes,
-    get_route_fares, get_latest_fare, insert_fare, insert_route,
-    route_exists
+    get_route_fares, get_latest_fare, insert_fare, insert_route, insert_sacco,
+    route_exists, update_route, delete_route, delete_fare, update_fare,
+    update_sacco, delete_sacco, export_routes_to_csv
 )
 from weather_api import get_weather, get_fare_alert, is_rainy, validate_kenyan_city, KENYAN_TOWNS
 
@@ -21,11 +22,12 @@ PAGES = [
     "View Routes",
     "Search Routes",
     "Route Details & Fare History",
-    "Weather Check & Fare Alert",
     "Add Fare Record",
     "Add New Route",
+    "Manage SACCOs",
     "Scrape & Seed Database",
     "Statistics",
+    "Weather Check & Fare Alert",
 ]
 
 def _route_type_selector(key="route_type"):
@@ -150,15 +152,64 @@ def route_details():
     col3.markdown(f"**Fare Max:** KSh {fmax}" if fmax else "**Fare Max:** N/A")
     col4.markdown(f"**Type:** {rtype.replace('_', ' ').title()}")
 
+    with st.expander("Edit this route"):
+        col1, col2 = st.columns(2)
+        new_rn = col1.text_input("Route number", value=route_number)
+        new_start = col1.text_input("Starting point", value=start)
+        new_end = col2.text_input("Destination", value=end)
+        new_fmin = col2.number_input("Min fare (KSh)", min_value=0, value=fmin or 0, step=5)
+        new_fmax = col1.number_input("Max fare (KSh)", min_value=0, value=fmax or 0, step=5)
+        new_rtype = col2.radio("Type", ["local", "long_distance"], index=0 if rtype == "local" else 1)
+        if st.button("Update Route"):
+            update_route(db_id, route_number=new_rn, start=new_start, end=new_end,
+                         fare_min=new_fmin or None, fare_max=new_fmax or None, route_type=new_rtype)
+            st.success("Route updated!")
+            st.rerun()
+
+    del_col1, del_col2 = st.columns(2)
+    with del_col1:
+        if st.button("Delete this route and all its fares", type="secondary", use_container_width=True):
+            if delete_route(db_id):
+                st.success("Route deleted.")
+                st.rerun()
+
     fares = get_route_fares(db_id)
     if fares:
-        fare_df = pd.DataFrame(
-            [
-                {"Amount (KSh)": a, "Date": d, "Weather": w or ""}
-                for _, a, d, w in fares
-            ]
-        )
-        st.dataframe(fare_df, use_container_width=True, hide_index=True)
+        fare_rows = []
+        for fid, a, d, w in fares:
+            fare_rows.append({"ID": fid, "Amount (KSh)": a, "Date": d, "Weather": w or ""})
+        fare_df = pd.DataFrame(fare_rows)
+
+        st.subheader("Fare Records")
+        with st.expander("Edit a fare record"):
+            edit_fid = st.number_input("Fare ID to edit", min_value=1, step=1, key="edit_fid")
+            edit_amount = st.number_input("New amount (KSh)", min_value=1, step=5, key="edit_amt")
+            edit_weather = st.text_input("Weather condition (optional)", key="edit_wx")
+            if st.button("Update Fare"):
+                update_fare(edit_fid, amount=edit_amount, weather=edit_weather or None)
+                st.success("Fare updated!")
+                st.rerun()
+
+        with st.expander("Delete a fare record by date"):
+            unique_dates = sorted(set(f[2] for f in fares), reverse=True)
+            del_date = st.selectbox("Select date", unique_dates, key="del_date")
+            matching = [(fid, a, d, w) for fid, a, d, w in fares if d == del_date]
+            if len(matching) == 1:
+                st.write(f"Fare on {del_date}: KSh {matching[0][1]} ({matching[0][3] or 'no weather'})")
+                if st.button("Delete this fare", key="del_date_btn"):
+                    if delete_fare(matching[0][0]):
+                        st.success("Fare deleted.")
+                        st.rerun()
+            elif len(matching) > 1:
+                del_opts = {f"KSh {a} on {d} ({w or 'no weather'})": fid for fid, a, d, w in matching}
+                del_choice = st.selectbox("Which fare?", list(del_opts.keys()), key="del_choice")
+                if st.button("Delete selected fare", key="del_date_btn"):
+                    if delete_fare(del_opts[del_choice]):
+                        st.success("Fare deleted.")
+                        st.rerun()
+
+        fare_df = fare_df.set_index("ID") if "ID" in fare_df.columns else fare_df
+        st.dataframe(fare_df, use_container_width=True)
 
         latest = fares[0]
         st.metric("Latest Fare", f"KSh {latest[1]}", help=f"as of {latest[2]}")
@@ -215,7 +266,7 @@ def add_fare():
     selected = options[selected_label]
 
     amount = st.number_input("Fare amount (KSh)", min_value=1, step=5)
-    tag_weather = st.checkbox("Tag with current weather")
+    tag_weather = st.checkbox("Tag with current weather", value=True)
 
     if st.button("Record Fare"):
         weather = None
@@ -257,6 +308,60 @@ def add_route():
             fmax = fare_max if fare_max > 0 else None
             insert_route(route_number, start, end, sacco[0], fmin, fmax, route_type)
             st.success(f"Route {route_number}: {start} → {end} added! (Type: {route_type})")
+
+def manage_saccos():
+    st.header("Manage SACCOs")
+
+    tab1, tab2, tab3 = st.tabs(["View SACCOs", "Add SACCO", "Edit / Delete SACCO"])
+
+    with tab1:
+        saccos = get_all_saccos()
+        if not saccos:
+            st.info("No SACCOs yet.")
+        else:
+            rows = []
+            for sid, name, code in saccos:
+                route_count = len(get_all_routes())  # rough count
+                rows.append({"ID": sid, "Name": name, "Code": code})
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    with tab2:
+        new_name = st.text_input("SACCO name")
+        new_code = st.text_input("SACCO code (e.g. SM)")
+        if st.button("Add SACCO"):
+            if not new_name or not new_code:
+                st.error("Both name and code are required.")
+            else:
+                sid, is_new = insert_sacco(new_name, new_code.upper())
+                if is_new:
+                    st.success(f"SACCO '{new_name}' added!")
+                else:
+                    st.warning("SACCO with that code already exists.")
+
+    with tab3:
+        saccos = get_all_saccos()
+        if not saccos:
+            st.info("No SACCOs to edit.")
+            return
+        opts = {f"{s[1]} ({s[2]})": s for s in saccos}
+        selected_label = st.selectbox("Select SACCO", list(opts.keys()), key="sacco_edit")
+        selected = opts[selected_label]
+        sid, old_name, old_code = selected
+
+        edit_name = st.text_input("Name", value=old_name)
+        edit_code = st.text_input("Code", value=old_code)
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Update SACCO", use_container_width=True):
+                if update_sacco(sid, name=edit_name, code=edit_code.upper()):
+                    st.success("SACCO updated!")
+                    st.rerun()
+        with col2:
+            if st.button("Delete SACCO and all its routes", type="secondary", use_container_width=True):
+                if delete_sacco(sid):
+                    st.success("SACCO deleted.")
+                    st.rerun()
+
 
 def scrape_and_seed():
     st.header("Scrape & Seed Database")
@@ -308,11 +413,12 @@ PAGE_FUNCS = {
     "View Routes": view_routes,
     "Search Routes": search_routes_page,
     "Route Details & Fare History": route_details,
-    "Weather Check & Fare Alert": weather_check,
     "Add Fare Record": add_fare,
     "Add New Route": add_route,
+    "Manage SACCOs": manage_saccos,
     "Scrape & Seed Database": scrape_and_seed,
     "Statistics": statistics,
+    "Weather Check & Fare Alert": weather_check,
 }
 
 st.sidebar.title("NaiFare")

@@ -197,6 +197,111 @@ def route_exists(route_number, start, end, sacco_id, route_type='local'):
     conn.close()
     return row[0] if row else None
 
+def update_route(route_db_id, route_number=None, start=None, end=None,
+                  sacco_id=None, fare_min=None, fare_max=None, route_type=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    fields = []
+    vals = []
+    if route_number is not None:
+        fields.append("route_number = ?"); vals.append(route_number)
+    if start is not None:
+        fields.append("start_point = ?"); vals.append(start)
+    if end is not None:
+        fields.append("end_point = ?"); vals.append(end)
+    if sacco_id is not None:
+        fields.append("sacco_id = ?"); vals.append(sacco_id)
+    if fare_min is not None:
+        fields.append("fare_min = ?"); vals.append(fare_min)
+    if fare_max is not None:
+        fields.append("fare_max = ?"); vals.append(fare_max)
+    if route_type is not None:
+        fields.append("route_type = ?"); vals.append(route_type)
+    if not fields:
+        conn.close()
+        return False
+    vals.append(route_db_id)
+    cursor.execute(f"UPDATE routes SET {', '.join(fields)} WHERE id = ?", vals)
+    conn.commit()
+    ok = cursor.rowcount > 0
+    conn.close()
+    return ok
+
+
+def delete_route(route_db_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM fares WHERE route_id = ?", (route_db_id,))
+    cursor.execute("DELETE FROM routes WHERE id = ?", (route_db_id,))
+    conn.commit()
+    ok = cursor.rowcount > 0
+    conn.close()
+    return ok
+
+
+def update_sacco(sacco_id, name=None, code=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    fields = []
+    vals = []
+    if name is not None:
+        fields.append("name = ?"); vals.append(name)
+    if code is not None:
+        fields.append("code = ?"); vals.append(code)
+    if not fields:
+        conn.close()
+        return False
+    vals.append(sacco_id)
+    cursor.execute(f"UPDATE saccos SET {', '.join(fields)} WHERE id = ?", vals)
+    conn.commit()
+    ok = cursor.rowcount > 0
+    conn.close()
+    return ok
+
+
+def delete_sacco(sacco_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM routes WHERE sacco_id = ?", (sacco_id,))
+    cursor.execute("DELETE FROM saccos WHERE id = ?", (sacco_id,))
+    conn.commit()
+    ok = cursor.rowcount > 0
+    conn.close()
+    return ok
+
+
+def update_fare(fare_id, amount=None, date=None, weather=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    fields = []
+    vals = []
+    if amount is not None:
+        fields.append("amount = ?"); vals.append(amount)
+    if date is not None:
+        fields.append("date = ?"); vals.append(date)
+    if weather is not None:
+        fields.append("weather_condition = ?"); vals.append(weather)
+    if not fields:
+        conn.close()
+        return False
+    vals.append(fare_id)
+    cursor.execute(f"UPDATE fares SET {', '.join(fields)} WHERE id = ?", vals)
+    conn.commit()
+    ok = cursor.rowcount > 0
+    conn.close()
+    return ok
+
+
+def delete_fare(fare_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM fares WHERE id = ?", (fare_id,))
+    conn.commit()
+    ok = cursor.rowcount > 0
+    conn.close()
+    return ok
+
+
 def export_routes_to_csv(filename="matatu_routes_export.csv"):
     import csv
 

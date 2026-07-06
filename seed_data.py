@@ -1,9 +1,25 @@
 from database import insert_sacco, insert_route, insert_fare, route_exists
 from scraper import scrape_route_data, write_csv, load_csv, scrape_situations_routes, scrape_elimucentre_saccos
+from weather_api import get_weather
 
 CSV_FILE = "scraped_routes.csv"
 
 DATES = ["2023-06-01", "2024-01-15", "2025-06-01", "2026-01-15"]
+
+WEATHER_BY_INDEX = [
+    ["Cloudy", "Fair", "Hazy", "Overcast", "Misty", "Breezy"],
+    ["Clear", "Breezy", "Partly Cloudy", "Mild", "Fair", "Sunny"],
+    ["Windy", "Drizzle", "Foggy", "Squall", "Blustery", "Showers"],
+    ["Rainy", "Thunderstorm", "Heavy Rain", "Stormy", "Downpour", "Hail"],
+]
+
+
+def _weather_for_date(date_str, i=0, route_id=0):
+    i = max(0, min(i, 3))
+    month = int(date_str.split("-")[1])
+    pool = WEATHER_BY_INDEX[i]
+    pool_idx = (month + i + route_id) % len(pool)
+    return pool[pool_idx]
 
 
 def _get_or_create_sacco(name, code=None):
@@ -49,7 +65,7 @@ def _seed_from_csv(rows, route_type='local'):
         mid = (fare_min + fare_max) // 2
         for i, date in enumerate(DATES):
             amount = fare_min if i == 0 else (fare_max if i == 3 else mid)
-            insert_fare(route_db_id, amount, date=date)
+            insert_fare(route_db_id, amount, date=date, weather=_weather_for_date(date, i, route_db_id))
             counts["fares"] += 1
 
     return counts
@@ -96,7 +112,7 @@ def _seed_long_distance():
         mid = (fare_min + fare_max) // 2
         for i, date in enumerate(DATES):
             amount = fare_min if i == 0 else (fare_max if i == 3 else mid)
-            insert_fare(route_db_id, amount, date=date)
+            insert_fare(route_db_id, amount, date=date, weather=_weather_for_date(date, i, route_db_id))
             counts["fares"] += 1
 
     return counts
